@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Générateur de glossaire épidémiologique</title>
+<style>
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --border: #e2e0d8;
+    --border-strong: #cfccc0;
+    --text-primary: #1f1e1c;
+    --text-secondary: #6b6a63;
+    --text-danger: #a32d2d;
+    --accent: #185fa5;
+    --radius: 8px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: var(--font);
+    display: flex;
+    justify-content: center;
+    padding: 3rem 1.5rem;
+  }
+  .card {
+    width: 100%;
+    max-width: 640px;
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 500;
+    margin: 0 0 0.5rem;
+  }
+  .sub {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0 0 1.75rem;
+    line-height: 1.6;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+  input[type="text"], input[type="password"], input[type="number"] {
+    width: 100%;
+    height: 36px;
+    padding: 0 10px;
+    border: 0.5px solid var(--border-strong);
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-family: var(--font);
+    background: #fff;
+    color: var(--text-primary);
+  }
+  input:focus { outline: none; box-shadow: 0 0 0 2px rgba(24,95,165,0.25); }
+  .field { margin-bottom: 1rem; }
+  .row { display: flex; gap: 12px; }
+  .row .field { flex: 1; }
+  .btns { display: flex; gap: 8px; margin: 1.25rem 0 1rem; }
+  button {
+    height: 36px;
+    padding: 0 14px;
+    border: 0.5px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: var(--font);
+    cursor: pointer;
+  }
+  button:hover { background: #f0efe9; }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.primary { background: var(--text-primary); color: #fff; border-color: var(--text-primary); }
+  button.primary:hover { background: #33322f; }
+  .err {
+    display: none;
+    font-size: 13px;
+    color: var(--text-danger);
+    margin-bottom: 12px;
+    line-height: 1.5;
+  }
+  .stat { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+  .stat .n { font-size: 24px; font-weight: 500; }
+  .stat .of { font-size: 14px; color: var(--text-secondary); }
+  #log {
+    background: #f3f2ec;
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    max-height: 260px;
+    overflow-y: auto;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  #log div { white-space: pre-wrap; word-break: break-word; }
+  .note {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 1.5rem;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Générateur de glossaire épidémiologique</h1>
+  <p class="sub">
+    Boucle par lots avec déduplication, exécutée entièrement dans ton navigateur.
+    La clé API n'est jamais stockée ni transmise ailleurs qu'au fournisseur choisi.
+  </p>
+
+  <div class="field">
+    <label for="baseurl">URL de base de l'API</label>
+    <input type="text" id="baseurl" value="https://tokenra.io" />
+  </div>
+
+  <div class="field">
+    <label for="apikey">Clé API</label>
+    <input type="password" id="apikey" placeholder="sk-..." autocomplete="off" />
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label for="cible">Cible de termes</label>
+      <input type="number" id="cible" value="200" min="10" max="500" />
+    </div>
+    <div class="field">
+      <label for="lot">Taille de lot</label>
+      <input type="number" id="lot" value="20" min="5" max="30" />
+    </div>
+  </div>
+
+  <div class="btns">
+    <button class="primary" id="btnStart">Lancer la boucle</button>
+    <button id="btnDownload" disabled>Télécharger le JSON</button>
+  </div>
+
+  <div class="err" id="errBox"></div>
+
+  <div class="stat">
+    <span class="n" id="count">0</span>
+    <span class="of">/ <span id="cibleOut">200</span> termes</span>
+  </div>
+
+  <div id="log"></div>
+
+  <p class="note">
+    Fichier statique autonome — aucune donnée n'est envoyée à un serveur intermédiaire.
+    Héberge-le où tu veux (GitHub Pages, serveur perso, ou ouvre-le simplement en local).
+    Fonctionne uniquement si le fournisseur d'API autorise les requêtes cross-origin
+    depuis un navigateur (CORS) ; sinon une erreur réseau explicite s'affichera ci-dessus.
+  </p>
+</div>
+
+<script>
+(function () {
+  const apikeyEl = document.getElementById('apikey');
+  const baseUrlEl = document.getElementById('baseurl');
+  const cibleEl = document.getElementById('cible');
+  const lotEl = document.getElementById('lot');
+  const btnStart = document.getElementById('btnStart');
+  const btnDownload = document.getElementById('btnDownload');
+  const countEl = document.getElementById('count');
+  const cibleOutEl = document.getElementById('cibleOut');
+  const logEl = document.getElementById('log');
+  const errBox = document.getElementById('errBox');
+
+  let glossaire = {};
+  let finalJson = null;
+
+  cibleEl.addEventListener('input', () => { cibleOutEl.textContent = cibleEl.value; });
+
+  function logLine(text) {
+    const p = document.createElement('div');
+    p.textContent = text;
+    logEl.appendChild(p);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function showError(msg) {
+    errBox.style.display = 'block';
+    errBox.textContent = msg;
+  }
+
+  function clearError() {
+    errBox.style.display = 'none';
+    errBox.textContent = '';
+  }
+
+  async function genererLot(baseUrl, termesExistants, nombre) {
+    const prompt = "Tu es un epidemiologiste expert et lexicographe. Produis exactement " + nombre +
+      " nouveaux termes MONOGRAPHIQUES et SPECIALISES du vocabulaire de l'epidemiologie " +
+      "(methodes, mesures, biais, plans d'etude, indicateurs, surveillance), chacun avec une " +
+      "definition precise et dense de 1 a 3 phrases. N'invente jamais un terme qui n'existe pas " +
+      "reellement. Ne repete AUCUN terme de cette liste deja generee: " +
+      JSON.stringify(termesExistants) +
+      ". Reponds UNIQUEMENT avec un tableau JSON valide, sans texte autour, au format: " +
+      '[{"terme": "...", "definition": "..."}, ...]';
+
+    const res = await fetch(baseUrl.replace(/\/$/, '') + "/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apikeyEl.value.trim(),
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 4000,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      throw new Error("HTTP " + res.status + " - " + t.slice(0, 300));
+    }
+
+    const data = await res.json();
+    const textBlock = (data.content || []).find(b => b.type === "text");
+    if (!textBlock) throw new Error("Reponse sans bloc texte");
+
+    let raw = textBlock.text.trim();
+    const start = raw.indexOf('[');
+    const end = raw.lastIndexOf(']');
+    if (start === -1 || end === -1) throw new Error("JSON introuvable dans la reponse");
+    raw = raw.slice(start, end + 1);
+
+    return JSON.parse(raw);
+  }
+
+  async function lancerBoucle() {
+    clearError();
+    if (!apikeyEl.value.trim()) {
+      showError("Entre une clé API avant de lancer.");
+      return;
+    }
+    if (!baseUrlEl.value.trim()) {
+      showError("Entre une URL de base avant de lancer.");
+      return;
+    }
+
+    glossaire = {};
+    finalJson = null;
+    btnDownload.disabled = true;
+    logEl.innerHTML = '';
+    countEl.textContent = '0';
+    btnStart.disabled = true;
+
+    const baseUrl = baseUrlEl.value.trim();
+    const cible = parseInt(cibleEl.value, 10) || 200;
+    const taille = parseInt(lotEl.value, 10) || 20;
+    const maxIter = 40;
+    let iteration = 0;
+
+    try {
+      while (Object.keys(glossaire).length < cible && iteration < maxIter) {
+        iteration++;
+        const restant = cible - Object.keys(glossaire).length;
+        const demande = Math.min(taille, restant);
+        const termesExistants = Object.values(glossaire).map(v => v.terme);
+
+        logLine("Itération " + iteration + " - demande de " + demande + " termes...");
+
+        let nouveaux;
+        try {
+          nouveaux = await genererLot(baseUrl, termesExistants, demande);
+        } catch (e) {
+          showError("Échec de l'appel API : " + e.message);
+          logLine("Erreur : " + e.message);
+          break;
+        }
+
+        let ajoutes = 0;
+        for (const entree of nouveaux) {
+          const terme = (entree.terme || "").trim();
+          const definition = (entree.definition || "").trim();
+          if (!terme || !definition) continue;
+          const cle = terme.toLowerCase();
+          if (!glossaire[cle]) {
+            glossaire[cle] = { terme, definition };
+            ajoutes++;
+          }
+        }
+
+        countEl.textContent = String(Object.keys(glossaire).length);
+        logLine("+" + ajoutes + " termes -> total " + Object.keys(glossaire).length + "/" + cible);
+
+        if (ajoutes === 0) {
+          logLine("Aucun nouveau terme, arrêt anticipé.");
+          break;
+        }
+      }
+
+      const resultats = Object.values(glossaire).sort((a, b) => a.terme.localeCompare(b.terme));
+      finalJson = {
+        domaine: "épidémiologie",
+        nombre_termes: resultats.length,
+        glossaire: resultats
+      };
+
+      logLine("Terminé : " + resultats.length + " termes.");
+      if (resultats.length > 0) btnDownload.disabled = false;
+
+    } finally {
+      btnStart.disabled = false;
+    }
+  }
+
+  btnStart.addEventListener('click', lancerBoucle);
+
+  btnDownload.addEventListener('click', () => {
+    if (!finalJson) return;
+    const blob = new Blob([JSON.stringify(finalJson, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'glossaire_epidemiologie.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+})();
+</script>
+</body>
+</html>
