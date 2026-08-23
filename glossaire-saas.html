@@ -124,7 +124,7 @@
 
   <div class="field">
     <label for="baseurl">URL de base de l'API</label>
-    <input type="text" id="baseurl" value="https://tokenra.io" />
+    <input type="text" id="baseurl" value="https://openrouter.ai/api/v1" />
   </div>
 
   <div class="field">
@@ -134,7 +134,7 @@
 
   <div class="field">
     <label for="model">Nom du modèle</label>
-    <input type="text" id="model" placeholder="ex: claude-sonnet-4-6" autocomplete="off" />
+    <input type="text" id="model" value="anthropic/claude-sonnet-4.5" autocomplete="off" />
   </div>
 
   <div class="row">
@@ -201,11 +201,10 @@
     }
     const baseUrl = baseUrlEl.value.trim().replace(/\/$/, '');
     try {
-      const res = await fetch(baseUrl + "/v1/models", {
+      const res = await fetch(baseUrl + "/models", {
         method: "GET",
         headers: {
-          "x-api-key": apikeyEl.value.trim(),
-          "anthropic-version": "2023-06-01"
+          "Authorization": "Bearer " + apikeyEl.value.trim()
         }
       });
       const text = await res.text();
@@ -264,12 +263,11 @@
       ". Reponds UNIQUEMENT avec un tableau JSON valide, sans texte autour, au format: " +
       '[{"terme": "...", "definition": "..."}, ...]';
 
-    const res = await fetch(baseUrl.replace(/\/$/, '') + "/v1/messages", {
+    const res = await fetch(baseUrl.replace(/\/$/, '') + "/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": apikeyEl.value.trim(),
-        "anthropic-version": "2023-06-01"
+        "Authorization": "Bearer " + apikeyEl.value.trim()
       },
       body: JSON.stringify({
         model: modelEl.value.trim(),
@@ -284,10 +282,12 @@
     }
 
     const data = await res.json();
-    const textBlock = (data.content || []).find(b => b.type === "text");
-    if (!textBlock) throw new Error("Reponse sans bloc texte");
+    const choice = (data.choices || [])[0];
+    if (!choice || !choice.message || !choice.message.content) {
+      throw new Error("Réponse sans contenu de message exploitable");
+    }
 
-    let raw = textBlock.text.trim();
+    let raw = choice.message.content.trim();
     const start = raw.indexOf('[');
     const end = raw.lastIndexOf(']');
     if (start === -1 || end === -1) throw new Error("JSON introuvable dans la reponse");
