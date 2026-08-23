@@ -132,6 +132,11 @@
     <input type="password" id="apikey" placeholder="sk-..." autocomplete="off" />
   </div>
 
+  <div class="field">
+    <label for="model">Nom du modèle</label>
+    <input type="text" id="model" placeholder="ex: claude-sonnet-4-6" autocomplete="off" />
+  </div>
+
   <div class="row">
     <div class="field">
       <label for="cible">Cible de termes</label>
@@ -142,6 +147,11 @@
       <input type="number" id="lot" value="20" min="5" max="30" />
     </div>
   </div>
+
+  <div class="btns">
+    <button id="btnListModels">Lister les modèles disponibles</button>
+  </div>
+  <div id="modelsBox" style="display:none; margin-bottom:1rem; font-size:13px; background:#f3f2ec; border-radius:8px; padding:0.75rem 1rem;"></div>
 
   <div class="btns">
     <button class="primary" id="btnStart">Lancer la boucle</button>
@@ -169,14 +179,58 @@
 (function () {
   const apikeyEl = document.getElementById('apikey');
   const baseUrlEl = document.getElementById('baseurl');
+  const modelEl = document.getElementById('model');
   const cibleEl = document.getElementById('cible');
   const lotEl = document.getElementById('lot');
   const btnStart = document.getElementById('btnStart');
   const btnDownload = document.getElementById('btnDownload');
+  const btnListModels = document.getElementById('btnListModels');
+  const modelsBox = document.getElementById('modelsBox');
   const countEl = document.getElementById('count');
   const cibleOutEl = document.getElementById('cibleOut');
   const logEl = document.getElementById('log');
   const errBox = document.getElementById('errBox');
+
+  btnListModels.addEventListener('click', async () => {
+    clearError();
+    modelsBox.style.display = 'none';
+    modelsBox.innerHTML = '';
+    if (!apikeyEl.value.trim()) {
+      showError("Entre une clé API avant de lister les modèles.");
+      return;
+    }
+    const baseUrl = baseUrlEl.value.trim().replace(/\/$/, '');
+    try {
+      const res = await fetch(baseUrl + "/v1/models", {
+        method: "GET",
+        headers: {
+          "x-api-key": apikeyEl.value.trim(),
+          "anthropic-version": "2023-06-01"
+        }
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        showError("HTTP " + res.status + " en listant les modèles : " + text.slice(0, 300));
+        return;
+      }
+      let data;
+      try { data = JSON.parse(text); } catch (e) { data = null; }
+      const ids = data && data.data ? data.data.map(m => m.id) : null;
+      if (ids && ids.length) {
+        modelsBox.style.display = 'block';
+        modelsBox.innerHTML = '<div style="margin-bottom:6px; color:var(--text-secondary);">Clique un modèle pour le sélectionner :</div>' +
+          ids.map(id => '<div class="modelPick" data-id="' + id.replace(/"/g,'&quot;') + '" style="cursor:pointer; padding:4px 0; text-decoration:underline;">' + id + '</div>').join('');
+        modelsBox.querySelectorAll('.modelPick').forEach(el => {
+          el.addEventListener('click', () => { modelEl.value = el.getAttribute('data-id'); });
+        });
+      } else {
+        modelsBox.style.display = 'block';
+        modelsBox.textContent = "Réponse reçue mais aucun format de liste reconnu : " + text.slice(0, 500);
+      }
+    } catch (e) {
+      showError("Échec de la requête /v1/models : " + e.message);
+    }
+  });
 
   let glossaire = {};
   let finalJson = null;
@@ -218,7 +272,7 @@
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: modelEl.value.trim(),
         max_tokens: 4000,
         messages: [{ role: "user", content: prompt }]
       })
@@ -250,6 +304,10 @@
     }
     if (!baseUrlEl.value.trim()) {
       showError("Entre une URL de base avant de lancer.");
+      return;
+    }
+    if (!modelEl.value.trim()) {
+      showError("Entre un nom de modèle avant de lancer (ou clique 'Lister les modèles disponibles').");
       return;
     }
 
